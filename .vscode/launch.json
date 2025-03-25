@@ -1,0 +1,53 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug nnUNetv2_train with custom trainer",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/nnunetv2/run/run_training.py",
+            "args": [
+                "511",
+                "3d_fullres",
+                "0",
+                "-device",
+                "cuda",
+                "-num_gpus",
+                "1",
+                "-tr",
+                "nnUNetTrainerFineTuning"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "1",
+                "nnUNet_raw": "/home/valentin/data/target/data/nnUnet_raw",
+                "nnUNet_preprocessed": "/home/valentin/data/target/data/nnUnet_preprocessed",
+                "nnUNet_results": "/home/valentin/data/target/data/nnUnet_results_debug"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false // Ensures you can debug external libraries if needed
+        },
+        {
+            "name": "Debug nnUNetv2_train",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/nnunetv2/run/run_training.py",
+            "args": [
+                "511",
+                "3d_fullres",
+                "0",
+                "-device",
+                "cuda",
+                "-num_gpus",
+                "1",
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "1",
+                "nnUNet_raw": "/home/valentin/data/target/data/nnUnet_raw",
+                "nnUNet_preprocessed": "/home/valentin/data/target/data/nnUnet_preprocessed",
+                "nnUNet_results": "/home/valentin/data/target/data/nnUnet_results_debug"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false // Ensures you can debug external libraries if needed
+        }
+    ]
+}
