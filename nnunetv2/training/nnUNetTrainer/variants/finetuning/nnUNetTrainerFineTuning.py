@@ -170,9 +170,53 @@ class nnUNetTrainerFineTuningV2(nnUNetTrainerFineTuning):
         self.logger = nnUNetLogger()
         # self.num_epochs = 3
         # hard-coded paths for pretrained weights..
-        self.pretrained_encoder_path = (
-            "/home/vincent/repos/ssl-bm/weights/cnn3d_nnunet_local_global_100ep_checkpoint.pth"
-        )
+        self.pretrained_encoder_path = "/home/vincent/repos/ssl-bm/weights/cnn3d_nnunet_local_global_100ep_checkpoint.pth"
+
+    def initialize(self):
+        super().initialize()
+        self.load_pretrained_weights()
+
+        if self.encoder_frozen:
+            self._freeze_layer_by_keyword("encoder")
+
+        if self.decoder_frozen:
+            self._freeze_layer_by_keyword("encoder")
 
     def load_pretrained_weights(self):
-        pass
+        self.print_to_log_file(
+            f"Loading pretrained weights {self.pretrained_encoder_path}"
+        )
+        state_dict = torch.load(self.pretrained_encoder_path, weights_only=False)
+        # Filter encoder_q out
+        network_state_dict = {
+            key[len("encoder_q.") :]: item
+            for key, item in state_dict["model_state_dict"].items()
+            if key.startswith("encoder_q.")
+        }
+        # Take only model, see Vincent's implementation
+        network_state_dict = {
+            key[len("model.") :]: item
+            for key, item in network_state_dict.items()
+            if key.startswith("model.")
+        }
+        # Filter the seg_layers out since we want to train them
+        network_state_dict = {
+            k: v
+            for k, v in network_state_dict.items()
+            if not k.startswith("decoder.seg_layers")
+        }
+        load_info = self.network.load_state_dict(network_state_dict, strict=False)
+        self.print_to_log_file("Missing keys:", load_info.missing_keys)
+        self.print_to_log_file("Unexpected keys:", load_info.unexpected_keys)
+
+    def _freeze_layer_by_keyword(self, keyword):
+        self.print_to_log_file("Freezing encoder parameters...")
+        for name, param in self.network.named_parameters():
+            if keyword in name:
+                param.requires_grad = False
+
+    def _unfreeze_layer_by_keyword(self, keyword):
+        self.print_to_log_file("Unfreezing encoder parameters...")
+        for name, param in self.network.named_parameters():
+            if keyword in name:
+                param.requires_grad = True
