@@ -1,12 +1,14 @@
 import matplotlib
 from batchgenerators.utilities.file_and_folder_operations import join
 
-matplotlib.use('agg')
+matplotlib.use("agg")
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+from nnunetv2.training.logging.nnunet_logger import nnUNetLogger
 
-class nnUNetLogger(object):
+
+class nnUNetLoggerV1(nnUNetLogger):
     """
     This class is really trivial. Don't expect cool functionality here. This is my makeshift solution to problems
     arising from out-of-sync epoch numbers and numbers of logged loss values. It also simplifies the trainer class a
@@ -17,78 +19,63 @@ class nnUNetLogger(object):
 
     def __init__(self, verbose: bool = False):
         self.my_fantastic_logging = {
-            'mean_fg_dice': list(),
-            'ema_fg_dice': list(),
-            'dice_per_class_or_region': list(),
-            'train_losses': list(),
-            'val_losses': list(),
-            'encoder_lrs': list(),
-            'decoder_lrs': list(),
-            'classifier_lrs': list(),
-            'epoch_start_timestamps': list(),
-            'epoch_end_timestamps': list()
+            "mean_fg_dice": list(),
+            "ema_fg_dice": list(),
+            "dice_per_class_or_region": list(),
+            "train_losses": list(),
+            "val_losses": list(),
+            "encoder_lrs": list(),
+            "decoder_lrs": list(),
+            "epoch_start_timestamps": list(),
+            "epoch_end_timestamps": list(),
         }
         self.verbose = verbose
         # shut up, this logging is great
-
-    def log(self, key, value, epoch: int):
-        """
-        sometimes shit gets messed up. We try to catch that here
-        """
-        assert key in self.my_fantastic_logging.keys() and isinstance(self.my_fantastic_logging[key], list), \
-            'This function is only intended to log stuff to lists and to have one entry per epoch'
-
-        if self.verbose: print(f'logging {key}: {value} for epoch {epoch}')
-
-        if len(self.my_fantastic_logging[key]) < (epoch + 1):
-            self.my_fantastic_logging[key].append(value)
-        else:
-            assert len(self.my_fantastic_logging[key]) == (epoch + 1), 'something went horribly wrong. My logging ' \
-                                                                       'lists length is off by more than 1'
-            print(f'maybe some logging issue!? logging {key} and {value}')
-            self.my_fantastic_logging[key][epoch] = value
-
-        # handle the ema_fg_dice special case! It is automatically logged when we add a new mean_fg_dice
-        if key == 'mean_fg_dice':
-            new_ema_pseudo_dice = self.my_fantastic_logging['ema_fg_dice'][epoch - 1] * 0.9 + 0.1 * value \
-                if len(self.my_fantastic_logging['ema_fg_dice']) > 0 else value
-            self.log('ema_fg_dice', new_ema_pseudo_dice, epoch)
 
     def plot_progress_png(self, output_folder):
         # Infer the epoch from internal logging
         epoch = min([len(i) for i in self.my_fantastic_logging.values()]) - 1
         sns.set(font_scale=2.5)
         fig, ax_all = plt.subplots(
-            4, 1, figsize=(30, 72))  # Added one more subplot for decoder LR
+            4, 1, figsize=(30, 72)
+        )  # Added one more subplot for additional LR
 
         # Regular progress.png as we are used to from previous nnU-Net versions
         ax = ax_all[0]
         ax2 = ax.twinx()
         x_values = list(range(epoch + 1))
-        ax.plot(x_values,
-                self.my_fantastic_logging['train_losses'][:epoch + 1],
-                color='b',
-                ls='-',
-                label="loss_tr",
-                linewidth=4)
-        ax.plot(x_values,
-                self.my_fantastic_logging['val_losses'][:epoch + 1],
-                color='r',
-                ls='-',
-                label="loss_val",
-                linewidth=4)
-        ax2.plot(x_values,
-                 self.my_fantastic_logging['mean_fg_dice'][:epoch + 1],
-                 color='g',
-                 ls='dotted',
-                 label="pseudo dice",
-                 linewidth=3)
-        ax2.plot(x_values,
-                 self.my_fantastic_logging['ema_fg_dice'][:epoch + 1],
-                 color='g',
-                 ls='-',
-                 label="pseudo dice (mov. avg.)",
-                 linewidth=4)
+        ax.plot(
+            x_values,
+            self.my_fantastic_logging["train_losses"][: epoch + 1],
+            color="b",
+            ls="-",
+            label="loss_tr",
+            linewidth=4,
+        )
+        ax.plot(
+            x_values,
+            self.my_fantastic_logging["val_losses"][: epoch + 1],
+            color="r",
+            ls="-",
+            label="loss_val",
+            linewidth=4,
+        )
+        ax2.plot(
+            x_values,
+            self.my_fantastic_logging["mean_fg_dice"][: epoch + 1],
+            color="g",
+            ls="dotted",
+            label="pseudo dice",
+            linewidth=3,
+        )
+        ax2.plot(
+            x_values,
+            self.my_fantastic_logging["ema_fg_dice"][: epoch + 1],
+            color="g",
+            ls="-",
+            label="pseudo dice (mov. avg.)",
+            linewidth=4,
+        )
         ax.set_xlabel("epoch")
         ax.set_ylabel("loss")
         ax2.set_ylabel("pseudo dice")
@@ -100,15 +87,17 @@ class nnUNetLogger(object):
         ax.plot(
             x_values,
             [
-                i - j for i, j in zip(
-                    self.my_fantastic_logging['epoch_end_timestamps'][:epoch +
-                                                                      1],
-                    self.my_fantastic_logging['epoch_start_timestamps'])
-            ][:epoch + 1],
-            color='b',
-            ls='-',
+                i - j
+                for i, j in zip(
+                    self.my_fantastic_logging["epoch_end_timestamps"][: epoch + 1],
+                    self.my_fantastic_logging["epoch_start_timestamps"],
+                )
+            ][: epoch + 1],
+            color="b",
+            ls="-",
             label="epoch duration",
-            linewidth=4)
+            linewidth=4,
+        )
         ylim = [0] + [ax.get_ylim()[1]]
         ax.set(ylim=ylim)
         ax.set_xlabel("epoch")
@@ -117,24 +106,28 @@ class nnUNetLogger(object):
 
         # Learning rate for encoder
         ax = ax_all[2]
-        ax.plot(x_values,
-                self.my_fantastic_logging['encoder_lrs'][:epoch + 1],
-                color='blue',
-                ls='-',
-                label="Encoder learning rate",
-                linewidth=4)
+        ax.plot(
+            x_values,
+            self.my_fantastic_logging["encoder_lrs"][: epoch + 1],
+            color="blue",
+            ls="-",
+            label="Encoder learning rate",
+            linewidth=4,
+        )
         ax.set_xlabel("epoch")
         ax.set_ylabel("learning rate")
         ax.legend(loc=(0, 1))
 
         # Learning rate for decoder
         ax = ax_all[3]
-        ax.plot(x_values,
-                self.my_fantastic_logging['decoder_lrs'][:epoch + 1],
-                color='red',
-                ls='-',
-                label="Decoder learning rate",
-                linewidth=4)
+        ax.plot(
+            x_values,
+            self.my_fantastic_logging["decoder_lrs"][: epoch + 1],
+            color="red",
+            ls="-",
+            label="Decoder learning rate",
+            linewidth=4,
+        )
         ax.set_xlabel("epoch")
         ax.set_ylabel("learning rate")
         ax.legend(loc=(0, 1))
@@ -144,13 +137,8 @@ class nnUNetLogger(object):
         fig.savefig(join(output_folder, "progress.png"))
         plt.close()
 
-    def get_checkpoint(self):
-        return self.my_fantastic_logging
 
-    def load_checkpoint(self, checkpoint: dict):
-        self.my_fantastic_logging = checkpoint
-
-class nnUNetLoggerV2(object):
+class nnUNetLoggerV2(nnUNetLogger):
     """
     This class is really trivial. Don't expect cool functionality here. This is my makeshift solution to problems
     arising from out-of-sync epoch numbers and numbers of logged loss values. It also simplifies the trainer class a
@@ -161,77 +149,65 @@ class nnUNetLoggerV2(object):
 
     def __init__(self, verbose: bool = False):
         self.my_fantastic_logging = {
-            'mean_fg_dice': list(),
-            'ema_fg_dice': list(),
-            'dice_per_class_or_region': list(),
-            'train_losses': list(),
-            'val_losses': list(),
-            'encoder_lrs': list(),
-            'decoder_lrs': list(),
-            'epoch_start_timestamps': list(),
-            'epoch_end_timestamps': list()
+            "mean_fg_dice": list(),
+            "ema_fg_dice": list(),
+            "dice_per_class_or_region": list(),
+            "train_losses": list(),
+            "val_losses": list(),
+            "encoder_lrs": list(),
+            "decoder_lrs": list(),
+            "seglayers_lrs": list(),
+            "epoch_start_timestamps": list(),
+            "epoch_end_timestamps": list(),
         }
         self.verbose = verbose
         # shut up, this logging is great
-
-    def log(self, key, value, epoch: int):
-        """
-        sometimes shit gets messed up. We try to catch that here
-        """
-        assert key in self.my_fantastic_logging.keys() and isinstance(self.my_fantastic_logging[key], list), \
-            'This function is only intended to log stuff to lists and to have one entry per epoch'
-
-        if self.verbose: print(f'logging {key}: {value} for epoch {epoch}')
-
-        if len(self.my_fantastic_logging[key]) < (epoch + 1):
-            self.my_fantastic_logging[key].append(value)
-        else:
-            assert len(self.my_fantastic_logging[key]) == (epoch + 1), 'something went horribly wrong. My logging ' \
-                                                                       'lists length is off by more than 1'
-            print(f'maybe some logging issue!? logging {key} and {value}')
-            self.my_fantastic_logging[key][epoch] = value
-
-        # handle the ema_fg_dice special case! It is automatically logged when we add a new mean_fg_dice
-        if key == 'mean_fg_dice':
-            new_ema_pseudo_dice = self.my_fantastic_logging['ema_fg_dice'][epoch - 1] * 0.9 + 0.1 * value \
-                if len(self.my_fantastic_logging['ema_fg_dice']) > 0 else value
-            self.log('ema_fg_dice', new_ema_pseudo_dice, epoch)
 
     def plot_progress_png(self, output_folder):
         # Infer the epoch from internal logging
         epoch = min([len(i) for i in self.my_fantastic_logging.values()]) - 1
         sns.set(font_scale=2.5)
+
         fig, ax_all = plt.subplots(
-            4, 1, figsize=(30, 72))  # Added one more subplot for decoder LR
+            5, 1, figsize=(30, 72)
+        )  # Added one more subplot for additional LR
 
         # Regular progress.png as we are used to from previous nnU-Net versions
         ax = ax_all[0]
         ax2 = ax.twinx()
         x_values = list(range(epoch + 1))
-        ax.plot(x_values,
-                self.my_fantastic_logging['train_losses'][:epoch + 1],
-                color='b',
-                ls='-',
-                label="loss_tr",
-                linewidth=4)
-        ax.plot(x_values,
-                self.my_fantastic_logging['val_losses'][:epoch + 1],
-                color='r',
-                ls='-',
-                label="loss_val",
-                linewidth=4)
-        ax2.plot(x_values,
-                 self.my_fantastic_logging['mean_fg_dice'][:epoch + 1],
-                 color='g',
-                 ls='dotted',
-                 label="pseudo dice",
-                 linewidth=3)
-        ax2.plot(x_values,
-                 self.my_fantastic_logging['ema_fg_dice'][:epoch + 1],
-                 color='g',
-                 ls='-',
-                 label="pseudo dice (mov. avg.)",
-                 linewidth=4)
+        ax.plot(
+            x_values,
+            self.my_fantastic_logging["train_losses"][: epoch + 1],
+            color="b",
+            ls="-",
+            label="loss_tr",
+            linewidth=4,
+        )
+        ax.plot(
+            x_values,
+            self.my_fantastic_logging["val_losses"][: epoch + 1],
+            color="r",
+            ls="-",
+            label="loss_val",
+            linewidth=4,
+        )
+        ax2.plot(
+            x_values,
+            self.my_fantastic_logging["mean_fg_dice"][: epoch + 1],
+            color="g",
+            ls="dotted",
+            label="pseudo dice",
+            linewidth=3,
+        )
+        ax2.plot(
+            x_values,
+            self.my_fantastic_logging["ema_fg_dice"][: epoch + 1],
+            color="g",
+            ls="-",
+            label="pseudo dice (mov. avg.)",
+            linewidth=4,
+        )
         ax.set_xlabel("epoch")
         ax.set_ylabel("loss")
         ax2.set_ylabel("pseudo dice")
@@ -243,15 +219,17 @@ class nnUNetLoggerV2(object):
         ax.plot(
             x_values,
             [
-                i - j for i, j in zip(
-                    self.my_fantastic_logging['epoch_end_timestamps'][:epoch +
-                                                                      1],
-                    self.my_fantastic_logging['epoch_start_timestamps'])
-            ][:epoch + 1],
-            color='b',
-            ls='-',
+                i - j
+                for i, j in zip(
+                    self.my_fantastic_logging["epoch_end_timestamps"][: epoch + 1],
+                    self.my_fantastic_logging["epoch_start_timestamps"],
+                )
+            ][: epoch + 1],
+            color="b",
+            ls="-",
             label="epoch duration",
-            linewidth=4)
+            linewidth=4,
+        )
         ylim = [0] + [ax.get_ylim()[1]]
         ax.set(ylim=ylim)
         ax.set_xlabel("epoch")
@@ -260,24 +238,42 @@ class nnUNetLoggerV2(object):
 
         # Learning rate for encoder
         ax = ax_all[2]
-        ax.plot(x_values,
-                self.my_fantastic_logging['encoder_lrs'][:epoch + 1],
-                color='blue',
-                ls='-',
-                label="Encoder learning rate",
-                linewidth=4)
+        ax.plot(
+            x_values,
+            self.my_fantastic_logging["encoder_lrs"][: epoch + 1],
+            color="blue",
+            ls="-",
+            label="Encoder learning rate",
+            linewidth=4,
+        )
         ax.set_xlabel("epoch")
         ax.set_ylabel("learning rate")
         ax.legend(loc=(0, 1))
 
         # Learning rate for decoder
         ax = ax_all[3]
-        ax.plot(x_values,
-                self.my_fantastic_logging['decoder_lrs'][:epoch + 1],
-                color='red',
-                ls='-',
-                label="Decoder learning rate",
-                linewidth=4)
+        ax.plot(
+            x_values,
+            self.my_fantastic_logging["decoder_lrs"][: epoch + 1],
+            color="red",
+            ls="-",
+            label="Decoder learning rate",
+            linewidth=4,
+        )
+        ax.set_xlabel("epoch")
+        ax.set_ylabel("learning rate")
+        ax.legend(loc=(0, 1))
+
+        # Learning rate for seglayers
+        ax = ax_all[4]
+        ax.plot(
+            x_values,
+            self.my_fantastic_logging["seglayers_lrs"][: epoch + 1],
+            color="red",
+            ls="-",
+            label="Segmentation Head learning rate",
+            linewidth=4,
+        )
         ax.set_xlabel("epoch")
         ax.set_ylabel("learning rate")
         ax.legend(loc=(0, 1))
@@ -286,9 +282,3 @@ class nnUNetLoggerV2(object):
 
         fig.savefig(join(output_folder, "progress.png"))
         plt.close()
-
-    def get_checkpoint(self):
-        return self.my_fantastic_logging
-
-    def load_checkpoint(self, checkpoint: dict):
-        self.my_fantastic_logging = checkpoint
