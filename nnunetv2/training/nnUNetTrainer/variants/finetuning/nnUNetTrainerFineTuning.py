@@ -1,4 +1,5 @@
 import torch
+import yaml
 
 from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
 from nnunetv2.training.nnUNetTrainer.variants.finetuning.custom_nnunet_logger import (
@@ -10,29 +11,70 @@ from nnunetv2.training.nnUNetTrainer.variants.finetuning.scheduler import (
 )
 
 
-class nnUNetTrainerFineTuning(nnUNetTrainer):
+class nnUNetTrainerWithConfig(nnUNetTrainer):
     def __init__(
         self,
         plans: dict,
         configuration: str,
         fold: int,
         dataset_json: dict,
-        unpack_dataset: bool = True,
         device: torch.device = torch.device("cuda"),
     ):
-        super().__init__(
-            plans, configuration, fold, dataset_json, unpack_dataset, device
+        # if trainer_config is None:
+        #     raise ValueError(
+        #         "When using nnUNetTrainerWithConfig you need to specify a trainer_config."
+        #     )
+        super(nnUNetTrainerWithConfig, self).__init__(
+            plans,
+            configuration,
+            fold,
+            dataset_json,
+            device=device,
         )
-        self.freeze_encoder_epochs = 0
-        self.encoder_lr = 1e-2
-        self.decoder_lr = 1e-2
-        self.encoder_frozen = True  # Track whether encoder is frozen
-        self.logger = nnUNetLoggerV1()
+        self.trainer_config = None
+
+    def _load_trainer_config(self):
+        with open(self.trainer_config, "r") as stream:
+            all_configs = yaml.safe_load(stream)
+            class_name = self.__class__.__name__
+            self.config = all_configs.get(class_name, {})
+
+        if len(self.config) == 0:
+            raise ValueError(
+                "Something wrong with the yaml config for nnUNetTrainerWithConfig."
+            )
+
+        self._parse_config()
+
+    def _parse_config(self):
+        # Get the list of parameters declared in the subclass __init__ (excluding self and config)
+        for key in self.config:
+            setattr(self, key, self.config[key])
+
+
+class nnUNetTrainerFineTuning(nnUNetTrainerWithConfig):
+    def __init__(
+        self,
+        plans: dict,
+        configuration: str,
+        fold: int,
+        dataset_json: dict,
+        device: torch.device = torch.device("cuda"),
+    ):
+        self.freeze_encoder_epochs = None
+        self.encoder_lr = None
+        self.decoder_lr = None
+        self.encoder_frozen = False
         # self.num_epochs = 3
-        # hard-coded paths for pretrained weights..
-        self.pretrained_encoder_path = (
-            "/home/vincent/repos/ssl-bm/weights/cnn3d_nnunet_2ndgood.pt"
+        self.pretrained_encoder_path = None
+        super().__init__(
+            plans,
+            configuration,
+            fold,
+            dataset_json,
+            device,
         )
+        self.logger = nnUNetLoggerV1()
 
     def configure_optimizers(self):
         """
@@ -149,31 +191,36 @@ class nnUNetTrainerFineTuning(nnUNetTrainer):
                 param.requires_grad = True
 
 
-class nnUNetTrainerFineTuningV2(nnUNetTrainer):
+class nnUNetTrainerFineTuningV2(nnUNetTrainerWithConfig):
     def __init__(
         self,
         plans: dict,
         configuration: str,
         fold: int,
         dataset_json: dict,
-        unpack_dataset: bool = True,
         device: torch.device = torch.device("cuda"),
     ):
-        super().__init__(
-            plans, configuration, fold, dataset_json, unpack_dataset, device
+        self.freeze_encoder_epochs = None
+        self.encoder_lr = None
+        self.decoder_lr = None
+        self.seglayers_lr = None
+        self.encoder_frozen = False  # Track whether encoder is frozen
+        self.decoder_frozen = False  # Track whether decoder is frozen
+        self.n_epochs_decoder_frozen = 0
+        self.n_epochs_encoder_frozen = 0
+        self.pretrained_encoder_path = None
+        super(nnUNetTrainerFineTuningV2, self).__init__(
+            plans,
+            configuration,
+            fold,
+            dataset_json,
+            device,
         )
-        self.freeze_encoder_epochs = 0
-        self.encoder_lr = 1e-2
-        self.decoder_lr = 1e-2
-        self.seglayers_lr = 1e-2
-        self.encoder_frozen = True  # Track whether encoder is frozen
-        self.decoder_frozen = True  # Track whether encoder is frozen
+
         self.logger = nnUNetLoggerV2()
-        # self.num_epochs = 3
-        # hard-coded paths for pretrained weights..
-        self.pretrained_encoder_path = "/home/vincent/repos/ssl-bm/weights/cnn3d_nnunet_local_global_100ep_checkpoint.pth"
 
     def initialize(self):
+        self._load_trainer_config()
         super().initialize()
         self.load_pretrained_weights()
 
@@ -182,6 +229,24 @@ class nnUNetTrainerFineTuningV2(nnUNetTrainer):
 
         if self.decoder_frozen:
             self._freeze_decoder()
+
+        self.print_to_log_file("======================================================")
+        self.print_to_log_file("nnUNetTrainerFineTuningV2 initialized with parameters:")
+        self.print_to_log_file(f"encoder_lr: {self.encoder_lr}")
+        self.print_to_log_file(f"decoder_lr: {self.decoder_lr}")
+        self.print_to_log_file(f"seglayers_lr: {self.seglayers_lr}")
+        self.print_to_log_file(f"encoder_frozen: {self.encoder_frozen}")
+        self.print_to_log_file(f"decoder_frozen: {self.decoder_frozen}")
+        self.print_to_log_file(
+            f"n_epochs_encoder_frozen: {self.n_epochs_encoder_frozen}"
+        )
+        self.print_to_log_file(
+            f"n_epochs_decoder_frozen: {self.n_epochs_decoder_frozen}"
+        )
+        self.print_to_log_file(
+            f"pretrained_encoder_path: {self.pretrained_encoder_path}"
+        )
+        self.print_to_log_file("======================================================")
 
     def configure_optimizers(self):
         """
@@ -226,7 +291,9 @@ class nnUNetTrainerFineTuningV2(nnUNetTrainer):
         self.print_to_log_file(
             f"Loading pretrained weights {self.pretrained_encoder_path}"
         )
-        state_dict = torch.load(self.pretrained_encoder_path, weights_only=False)
+        state_dict = torch.load(
+            self.pretrained_encoder_path, map_location="cpu", weights_only=False
+        )
         # Filter encoder_q out
         network_state_dict = {
             key[len("encoder_q.") :]: item
@@ -264,25 +331,23 @@ class nnUNetTrainerFineTuningV2(nnUNetTrainer):
     def _freeze_decoder(self):
         self.print_to_log_file("Freezing encoder parameters...")
         for name, param in self.network.named_parameters():
-            if "decoder" in name and "encoder" not in name:
+            if "decoder" in name and "encoder" not in name and "seg_layers" not in name:
                 param.requires_grad = False
 
-    def _unfreeze_encoder(self):
+    def _unfreeze_decoder(self):
         self.print_to_log_file("Unfreezing encoder parameters...")
         for name, param in self.network.named_parameters():
-            if "decoder" in name and "encoder" not in name:
+            if "decoder" in name and "encoder" not in name and "seg_layers" not in name:
                 param.requires_grad = True
 
     def _freeze_seglayers(self):
         self.print_to_log_file("Freezing encoder parameters...")
-        raise NotImplementedError("TO FINISH!!!")
         for name, param in self.network.named_parameters():
             if "seg_layers" in name:
                 param.requires_grad = False
 
     def _unfreeze_seglayers(self):
         self.print_to_log_file("Unfreezing encoder parameters...")
-        raise NotImplementedError("TO FINISH!!!")
         for name, param in self.network.named_parameters():
             if "seg_layers" in name:
                 param.requires_grad = True
@@ -297,10 +362,13 @@ class nnUNetTrainerFineTuningV2(nnUNetTrainer):
         self.print_to_log_file(f"Epoch {self.current_epoch}")
         encoder_lr = self.optimizer.param_groups[0]["lr"]
         decoder_lr = self.optimizer.param_groups[1]["lr"]
+        seglayers_lr = self.optimizer.param_groups[2]["lr"]
         self.print_to_log_file(f"Encoder learning rate: {encoder_lr:.5f}")
         self.print_to_log_file(f"Decoder learning rate: {decoder_lr:.5f}")
+        self.print_to_log_file(f"Segmentation Head learning rate: {seglayers_lr:.5f}")
         self.logger.log("encoder_lrs", encoder_lr, self.current_epoch)
         self.logger.log("decoder_lrs", decoder_lr, self.current_epoch)
+        self.logger.log("seglayers_lrs", seglayers_lr, self.current_epoch)
 
     def run_training(self):
         """
@@ -312,10 +380,15 @@ class nnUNetTrainerFineTuningV2(nnUNetTrainer):
         for epoch in range(self.current_epoch, self.num_epochs):
             self.on_epoch_start()
 
-            if self.encoder_frozen and epoch >= self.freeze_encoder_epochs:
+            if self.encoder_frozen and epoch >= self.n_epochs_encoder_frozen:
                 self._unfreeze_encoder()
                 self.encoder_frozen = False
-                # self.optimizer, self.lr_scheduler = self.configure_optimizers()
+                self.print_to_log_file(f"Unfreezing encoder at epoch {epoch}")
+
+            if self.decoder_frozen and epoch >= self.n_epochs_decoder_frozen:
+                self._unfreeze_decoder()
+                self.decoder_frozen = False
+                self.print_to_log_file(f"Unfreezing decoder at epoch {epoch}")
 
             self.on_train_epoch_start()
             train_outputs = []

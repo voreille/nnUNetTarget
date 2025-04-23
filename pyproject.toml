@@ -81,6 +81,7 @@ nnUNetv2_move_plans_between_datasets = "nnunetv2.experiment_planning.plans_for_p
 nnUNetv2_evaluate_folder = "nnunetv2.evaluation.evaluate_predictions:evaluate_folder_entry_point"
 nnUNetv2_evaluate_simple = "nnunetv2.evaluation.evaluate_predictions:evaluate_simple_entry_point"
 nnUNetv2_convert_MSD_dataset = "nnunetv2.dataset_conversion.convert_MSD_dataset:entry_point"
+nnUNetv2_train_with_config = "nnunetv2.run.run_training_custom:run_training_entry"
 
 [project.optional-dependencies]
 dev = [

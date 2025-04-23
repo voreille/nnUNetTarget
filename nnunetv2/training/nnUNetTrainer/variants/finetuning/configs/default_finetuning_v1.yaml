@@ -1,0 +1,16 @@
+nnUNetTrainerFineTuning:
+  encoder_lr: 1e-2
+  decoder_lr: 1e-2
+  encoder_frozen: True
+  freeze_encoder_epochs: 0
+  pretrained_encoder_path: "/home/vincent/repos/ssl-bm/weights/cnn3d_nnunet_2ndgood.pt"
+
+nnUNetTrainerFineTuningV2:
+  encoder_lr: 0.001
+  decoder_lr: 0.005
+  seglayers_lr: 0.01
+  encoder_frozen: True
+  decoder_frozen: True
+  n_epochs_decoder_frozen: 100
+  n_epochs_encoder_frozen: 400
+  pretrained_encoder_path: "/home/vincent/repos/ssl-bm/weights/cnn3d_nnunet_local_global_100ep_checkpoint.pth"

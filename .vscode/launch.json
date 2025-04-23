@@ -2,6 +2,33 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Debug nnUNetv2_train_with_config",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/nnunetv2/run/run_training_custom.py",
+            "args": [
+                "510",
+                "3d_fullres",
+                "0",
+                "-device",
+                "cuda",
+                "-num_gpus",
+                "1",
+                "-tr",
+                "nnUNetTrainerFineTuningV2",
+                "-trainer_config",
+                "/home/valentin/workspaces/nnUNetTarget/nnunetv2/training/nnUNetTrainer/variants/finetuning/configs/default_finetuning_v1.yaml"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0",
+                "nnUNet_raw": "/home/valentin/data/target/data/nnUnet_raw",
+                "nnUNet_preprocessed": "/home/valentin/data/target/data/nnUNet_preprocessed",
+                "nnUNet_results": "/home/valentin/data/target/data/nnUnet_results_debug"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false // Ensures you can debug external libraries if needed
+        },
+        {
             "name": "Debug nnUNetv2_train with custom trainer",
             "type": "debugpy",
             "request": "launch",
